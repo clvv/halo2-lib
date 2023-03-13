@@ -23,6 +23,10 @@ halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.gi
 # plotting circuit layout
 plotters = { version = "0.3.0", optional = true }
 tabbycat = { version = "0.1", features = ["attributes"], optional = true }
+quote = "1.0"
+proc-macro2 = "1.0"
+rust-format = "0.3.4"
+rcc = { path = "../../rcc" }
 
 [dev-dependencies]
 ark-std = { version = "0.3.0", features = ["print-trace"] }

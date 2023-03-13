@@ -34,6 +34,10 @@ pub use halo2_proofs_axiom as halo2_proofs;
 use halo2_proofs::plonk::Assigned;
 use utils::ScalarField;
 
+use rcc::runtime_composer::{RuntimeComposer, Wire, };
+use proc_macro2::TokenStream;
+use quote::quote;
+
 pub mod gates;
 pub mod utils;
 
@@ -74,6 +78,7 @@ impl<F: ScalarField> QuantumCell<F> {
 pub struct ContextCell {
     pub context_id: usize,
     pub offset: usize,
+    pub wire: Wire
 }
 
 /// The object that you fetch from a context when you want to reference its value in later computations.
@@ -106,10 +111,13 @@ pub struct Context<F: ScalarField> {
 
     /// this is the single column of advice cells exactly as they should be assigned
     pub advice: Vec<Assigned<F>>,
+    pub wires: Vec<Wire>,
     /// `cells_to_lookup` is a vector keeping track of all cells that we want to enable lookup for. When there is more than 1 advice column we will copy_advice all of these cells to the single lookup enabled column and do lookups there
     pub cells_to_lookup: Vec<AssignedValue<F>>,
 
     pub zero_cell: Option<AssignedValue<F>>,
+
+    pub runtime_composer: RuntimeComposer,
 
     // To save time from re-allocating new temporary vectors that get quickly dropped (e.g., for some range checks), we keep a vector with high capacity around that we `clear` before use each time
     // This is NOT THREAD SAFE
@@ -135,11 +143,13 @@ impl<F: ScalarField> Context<F> {
             witness_gen_only,
             context_id,
             advice: Vec::new(),
+            wires: Vec::new(),
             cells_to_lookup: Vec::new(),
             zero_cell: None,
             selector: Vec::new(),
             advice_equality_constraints: Vec::new(),
             constant_equality_constraints: Vec::new(),
+            runtime_composer: RuntimeComposer::new(),
         }
     }
 
@@ -151,15 +161,18 @@ impl<F: ScalarField> Context<F> {
     pub fn assign_cell(&mut self, input: impl Into<QuantumCell<F>>) {
         match input.into() {
             QuantumCell::Existing(acell) => {
+                let wire = self.runtime_composer.new_wire();
                 self.advice.push(acell.value);
                 if !self.witness_gen_only {
                     let new_cell =
-                        ContextCell { context_id: self.context_id, offset: self.advice.len() - 1 };
+                        ContextCell { context_id: self.context_id, offset: self.advice.len() - 1, wire };
+                    self.wires.push(wire);
                     self.advice_equality_constraints.push((new_cell, acell.cell.unwrap()));
                 }
             }
             QuantumCell::Witness(val) => {
                 self.advice.push(Assigned::Trivial(val));
+                self.wires.push(self.runtime_composer.new_wire());
             }
             QuantumCell::WitnessFraction(val) => {
                 self.advice.push(val);
@@ -167,8 +180,10 @@ impl<F: ScalarField> Context<F> {
             QuantumCell::Constant(c) => {
                 self.advice.push(Assigned::Trivial(c));
                 if !self.witness_gen_only {
+                    let wire = self.runtime_composer.new_wire();
                     let new_cell =
-                        ContextCell { context_id: self.context_id, offset: self.advice.len() - 1 };
+                        ContextCell { context_id: self.context_id, offset: self.advice.len() - 1, wire };
+                    self.wires.push(wire);
                     self.constant_equality_constraints.push((c, new_cell));
                 }
             }
@@ -177,9 +192,11 @@ impl<F: ScalarField> Context<F> {
 
     pub fn last(&self) -> Option<AssignedValue<F>> {
         self.advice.last().map(|v| {
+            let wire = *self.wires.last().unwrap();
             let cell = (!self.witness_gen_only).then_some(ContextCell {
                 context_id: self.context_id,
                 offset: self.advice.len() - 1,
+                wire,
             });
             AssignedValue { value: *v, cell }
         })
@@ -193,8 +210,20 @@ impl<F: ScalarField> Context<F> {
         };
         assert!(offset < self.advice.len());
         let cell =
-            (!self.witness_gen_only).then_some(ContextCell { context_id: self.context_id, offset });
+            (!self.witness_gen_only).then_some(ContextCell {
+            context_id: self.context_id,
+            offset,
+            wire: self.wires[offset],
+        });
         AssignedValue { value: self.advice[offset], cell }
+    }
+
+    pub fn get_cell(&self, offset: usize) -> ContextCell {
+        ContextCell {
+            context_id: self.context_id,
+            offset,
+            wire: self.wires[offset],
+        }
     }
 
     pub fn constrain_equal(&mut self, a: &AssignedValue<F>, b: &AssignedValue<F>) {
@@ -269,23 +298,14 @@ impl<F: ScalarField> Context<F> {
         if !self.witness_gen_only {
             for (offset1, offset2) in equality_offsets {
                 self.advice_equality_constraints.push((
-                    ContextCell {
-                        context_id: self.context_id,
-                        offset: row_offset.wrapping_add_signed(offset1),
-                    },
-                    ContextCell {
-                        context_id: self.context_id,
-                        offset: row_offset.wrapping_add_signed(offset2),
-                    },
+                    self.get_cell(row_offset.wrapping_add_signed(offset1)),
+                    self.get_cell(row_offset.wrapping_add_signed(offset2)),
                 ));
             }
             for (cell, offset) in external_equality {
                 self.advice_equality_constraints.push((
                     cell.unwrap(),
-                    ContextCell {
-                        context_id: self.context_id,
-                        offset: row_offset.wrapping_add_signed(offset),
-                    },
+                    self.get_cell(row_offset.wrapping_add_signed(offset)),
                 ));
             }
         }
@@ -302,7 +322,9 @@ impl<F: ScalarField> Context<F> {
             .enumerate()
             .map(|(i, v)| {
                 let cell = (!self.witness_gen_only)
-                    .then_some(ContextCell { context_id: self.context_id, offset: row_offset + i });
+                    .then_some(
+                        self.get_cell(row_offset + i)
+                        );
                 AssignedValue { value: *v, cell }
             })
             .collect()
@@ -331,5 +353,32 @@ impl<F: ScalarField> Context<F> {
         let zero_cell = self.load_constant(F::zero());
         self.zero_cell = Some(zero_cell);
         zero_cell
+    }
+
+    /// Returns a TokenStream encoding a closure that computes all the witnesses
+    pub fn compose_rust_witness_gen(&mut self) -> TokenStream {
+        let prelude = quote! {
+            use halo2_base::halo2_proofs::{
+                arithmetic::Field,
+                // circuit::*,
+                halo2curves::bn256::{Bn256, Fr as F, G1Affine},
+                // plonk::*,
+            };
+            // runtime composer expects WireVal to be defined
+            type WireVal = F;
+
+            use std::env;
+            let args: Vec<String> = env::args().collect();
+        };
+
+        // let (constant_values, constant_indices): (Vec<_>, Vec<_>) = self.constants.iter().map(|(v, w)| {
+        //     (v, w.global_index)
+        // }).unzip();
+
+        let constant_decl = quote! {
+            // #( (*wire(#constant_indices)) = F::from(BigInt!(#constant_values)) ; ) *
+        };
+
+        self.runtime_composer.compose_rust_witness_gen(prelude, constant_decl)
     }
 }

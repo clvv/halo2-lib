@@ -10,11 +10,13 @@ use crate::{
     AssignedValue, Context,
     QuantumCell::{self, Constant, Existing, Witness, WitnessFraction},
 };
+use rcc::mock_composer::new_context_of;
 use serde::{Deserialize, Serialize};
 use std::{
     iter::{self},
     marker::PhantomData,
 };
+use quote::quote;
 
 /// The maximum number of phases halo2 currently supports
 pub const MAX_PHASE: usize = 3;
@@ -708,7 +710,18 @@ impl<F: ScalarField> GateChip<F> {
             let cells = cells.collect::<Vec<_>>();
             let lo = cells.len();
             let len = lo / 3;
+            let start = ctx.advice.len();
+            let __c = ctx.runtime_composer.new_context("ip".into());
             ctx.assign_region(cells, (0..len).map(|i| 3 * i as isize));
+            for i in 0..len {
+                let prev = ctx.wires[start + 3*i];
+                let a = ctx.wires[start + 3*i + 1];
+                let b = ctx.wires[start + 3*i + 2];
+                let next = ctx.wires[start + 3*i + 3];
+                ctx.runtime_composer.runtime(quote! {
+                    #next = #a * #b + #prev;
+                });
+            }
         };
         b_starts_with_one
     }
