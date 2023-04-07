@@ -10,7 +10,7 @@ use crate::{
     AssignedValue, Context,
     QuantumCell::{self, Constant, Existing, Witness, WitnessFraction},
 };
-use rcc::mock_composer::new_context_of;
+use rcc::Composer;
 use serde::{Deserialize, Serialize};
 use std::{
     iter::{self},
