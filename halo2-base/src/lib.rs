@@ -41,6 +41,9 @@ use quote::quote;
 pub mod gates;
 pub mod utils;
 
+use serde::{Serialize, Deserialize};
+use serde_json;
+
 #[cfg(feature = "halo2-axiom")]
 pub const SKIP_FIRST_PASS: bool = false;
 #[cfg(feature = "halo2-pse")]
@@ -135,6 +138,13 @@ pub struct Context<F: ScalarField> {
     pub advice_equality_constraints: Vec<(ContextCell, ContextCell)>,
     /// A pair of (constant, advice_cell) that must be constrained equal
     pub constant_equality_constraints: Vec<(F, ContextCell)>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Config {
+    pub selector: Vec<bool>,
+    pub advice_equality_constraints: Vec<(usize, usize)>,
+    pub constant_equality_constraints: Vec<([u64; 4], usize)>,
 }
 
 impl<F: ScalarField> Context<F> {
@@ -380,5 +390,27 @@ impl<F: ScalarField> Context<F> {
         };
 
         self.runtime_composer.compose_rust_witness_gen(prelude, constant_decl)
+    }
+
+    pub fn to_config(&self) -> Config {
+        Config {
+            selector: self.selector.clone(),
+            advice_equality_constraints:
+                self.advice_equality_constraints.iter()
+                .map(|(cell1, cell2)| (cell1.offset, cell2.offset)).collect(),
+            constant_equality_constraints:
+                self.constant_equality_constraints.iter()
+                .map(|(e, cell)|
+                    (<Vec<u64> as TryInto<[u64; 4]>>::try_into(e.to_u64_limbs(4, 64)).unwrap(), cell.offset)
+                    ).collect(),
+        }
+    }
+
+    pub fn from_json(json: &str) -> Config {
+       serde_json::from_str(json).unwrap()
+    }
+
+    pub fn serialize_config(&self) -> String {
+        serde_json::to_string(&self.to_config()).unwrap()
     }
 }

@@ -54,7 +54,10 @@ fn main() {
     let k = 10u32;
     // create circuit for keygen
     let mut builder = GateThreadBuilder::new(false);
-    inner_prod_bench(builder.main(0), vec![Fr::zero(); 5], vec![Fr::zero(); 5]);
+    inner_prod_bench(builder.main(0), vec![Fr::one(); 5], vec![Fr::one(); 5]);
+
+    let s = builder.main(0).serialize_config();
+    println!("{:?}", Context::<Fr>::from_json(&s));
 
     // Compose the rust witness gen code
     let witness_gen_code = builder.main(0).compose_rust_witness_gen().clone();
@@ -87,9 +90,9 @@ fn main() {
     });
 
     // Write it to `examples/circuit_runtime.rs`
-    // let data = RustFmt::default().format_str(raw).unwrap();
+    let data = RustFmt::default().format_str(raw).unwrap();
 
-    std::fs::write("examples/circuit_runtime.rs", raw).expect("Unable to write file");
+    std::fs::write("examples/inner_product_runtime.rs", data).expect("Unable to write file");
 
     // // check the circuit is correct just in case
     // MockProver::run(k, &circuit, vec![]).unwrap().assert_satisfied();

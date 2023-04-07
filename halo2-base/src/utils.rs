@@ -15,7 +15,7 @@ pub trait BigPrimeField: ScalarField {
 #[cfg(feature = "halo2-axiom")]
 impl<F> BigPrimeField for F
 where
-    F: FieldExt + Hash + Into<[u64; 4]> + From<[u64; 4]>,
+    F: FieldExt + Hash + Serialize + Into<[u64; 4]> + From<[u64; 4]>,
 {
     #[inline(always)]
     fn from_u64_digits(val: &[u64]) -> Self {
@@ -27,7 +27,7 @@ where
 }
 
 #[cfg(feature = "halo2-axiom")]
-pub trait ScalarField: FieldExt + Hash {
+pub trait ScalarField: FieldExt + Hash + Serialize {
     /// Returns the base `2^bit_len` little endian representation of the prime field element
     /// up to `num_limbs` number of limbs (truncates any extra limbs)
     ///
@@ -39,7 +39,7 @@ pub trait ScalarField: FieldExt + Hash {
 #[cfg(feature = "halo2-axiom")]
 impl<F> ScalarField for F
 where
-    F: FieldExt + Hash + Into<[u64; 4]>,
+    F: FieldExt + Hash + Serialize + Into<[u64; 4]>,
 {
     #[inline(always)]
     fn to_u64_limbs(self, num_limbs: usize, bit_len: usize) -> Vec<u64> {
@@ -260,6 +260,8 @@ pub fn compose(input: Vec<BigUint>, bit_len: usize) -> BigUint {
 
 #[cfg(feature = "halo2-axiom")]
 pub use halo2_proofs_axiom::halo2curves::CurveAffineExt;
+use serde::Deserialize;
+use serde::Serialize;
 
 #[cfg(feature = "halo2-pse")]
 pub trait CurveAffineExt: CurveAffine {
