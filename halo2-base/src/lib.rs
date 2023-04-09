@@ -34,7 +34,7 @@ pub use halo2_proofs_axiom as halo2_proofs;
 use halo2_proofs::plonk::Assigned;
 use utils::ScalarField;
 
-use rcc::runtime_composer::{RuntimeComposer, Wire, };
+use rcc::{Composer, runtime_composer::{RuntimeComposer, Wire}};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -413,4 +413,21 @@ impl<F: ScalarField> Context<F> {
     pub fn serialize_config(&self) -> String {
         serde_json::to_string(&self.to_config()).unwrap()
     }
+
+    pub fn smart_map<T>(&mut self, iter: impl Iterator<Item = T>, mut f: impl FnMut(&mut Self, &T) -> ()) {
+        let items: Vec<T> = iter.collect();
+        let step_size = (items.len() as f64).sqrt() as usize;
+        println!("step_size: {step_size}");
+        items.iter().enumerate().for_each(|(i, item)| {
+            if i % step_size == 0 {
+                if i > 0 {
+                    self.runtime_composer.exit_context();
+                }
+                self.runtime_composer.enter_context(String::from("smart_loop"));
+            }
+            f(self, item)
+        });
+        self.runtime_composer.exit_context();
+    }
+
 }

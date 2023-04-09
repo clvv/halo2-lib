@@ -37,7 +37,7 @@ use pprof::criterion::{Output, PProfProfiler};
 use quote::quote;
 use rust_format::{RustFmt, Formatter};
 
-const K: u32 = 16;
+const K: u32 = 19;
 
 fn inner_prod_bench<F: ScalarField>(ctx: &mut Context<F>, a: Vec<F>, b: Vec<F>) {
     assert_eq!(a.len(), b.len());
@@ -45,9 +45,10 @@ fn inner_prod_bench<F: ScalarField>(ctx: &mut Context<F>, a: Vec<F>, b: Vec<F>) 
     let b = ctx.assign_witnesses(b);
 
     let chip = GateChip::default();
-    for _ in 0..(1 << K) / 16 - 10 {
+
+    ctx.smart_map::<usize>(0..(1 << K) / 16 - 10, |ctx, _| {
         chip.inner_product(ctx, a.clone(), b.clone().into_iter().map(Existing));
-    }
+    });
 }
 
 fn main() {
