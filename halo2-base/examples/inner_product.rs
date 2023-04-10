@@ -57,10 +57,10 @@ fn main() {
     let mut builder = GateThreadBuilder::new(false);
     inner_prod_bench(builder.main(0), vec![Fr::one(); 5], vec![Fr::one(); 5]);
 
-    let config_json = builder.main(0).serialize_config();
-
     // Compose the rust witness gen code
     let witness_gen_code = builder.main(0).compose_rust_witness_gen().clone();
+
+    let full_config = builder.full_config(k as usize, Some(20));
 
     builder.config(k as usize, Some(20));
     let circuit = GateCircuitBuilder::mock(builder);
@@ -112,10 +112,7 @@ fn main() {
 
     std::fs::write("examples/inner_product_runtime.rs", raw).expect("Unable to write file");
 
-    std::fs::write("examples/inner_product_config.json", config_json).expect("Unable to write the config json file");
-
-    // check the circuit is correct just in case
-    MockProver::run(k, &circuit, vec![]).unwrap().assert_satisfied();
+    std::fs::write("examples/inner_product_config.json", full_config.to_json()).expect("Unable to write the config json file");
 
     let params = ParamsKZG::<Bn256>::setup(k, OsRng);
     let vk = keygen_vk(&params, &circuit).expect("vk should not fail");

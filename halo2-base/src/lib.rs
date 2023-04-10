@@ -42,7 +42,6 @@ pub mod gates;
 pub mod utils;
 
 use serde::{Serialize, Deserialize};
-use serde_json;
 
 #[cfg(feature = "halo2-axiom")]
 pub const SKIP_FIRST_PASS: bool = false;
@@ -404,14 +403,6 @@ impl<F: ScalarField> Context<F> {
                     (<Vec<u64> as TryInto<[u64; 4]>>::try_into(e.to_u64_limbs(4, 64)).unwrap(), cell.offset)
                     ).collect(),
         }
-    }
-
-    pub fn from_json(json: &str) -> Config {
-       serde_json::from_str(json).unwrap()
-    }
-
-    pub fn serialize_config(&self) -> String {
-        serde_json::to_string(&self.to_config()).unwrap()
     }
 
     pub fn smart_map<T>(&mut self, iter: impl Iterator<Item = T>, mut f: impl FnMut(&mut Self, &T) -> ()) {

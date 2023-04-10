@@ -260,7 +260,6 @@ pub fn compose(input: Vec<BigUint>, bit_len: usize) -> BigUint {
 
 #[cfg(feature = "halo2-axiom")]
 pub use halo2_proofs_axiom::halo2curves::CurveAffineExt;
-use serde::Deserialize;
 use serde::Serialize;
 
 #[cfg(feature = "halo2-pse")]

@@ -8,8 +8,9 @@ use crate::{
         plonk::{Advice, Circuit, Column, ConstraintSystem, Error, Selector},
     },
     utils::ScalarField,
-    Context, SKIP_FIRST_PASS,
+    Context, SKIP_FIRST_PASS, Config,
 };
+use halo2_proofs_axiom::dev::MockProver;
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
@@ -145,6 +146,29 @@ impl<F: ScalarField> GateThreadBuilder<F> {
         }
         std::env::set_var("FLEX_GATE_CONFIG_PARAMS", serde_json::to_string(&params).unwrap());
         params
+    }
+
+    pub fn full_config(&mut self, k: usize, minimum_rows: Option<usize>) -> FullConfig {
+        let flexgateconfig = self.config(k, minimum_rows);
+
+        let ctx = self.main(0);
+        let Config {
+            selector,
+            advice_equality_constraints,
+            constant_equality_constraints,
+        } = ctx.to_config();
+
+        let circuit = GateCircuitBuilder::mock(self.clone());
+        MockProver::run(k as u32, &circuit, vec![]).unwrap().assert_satisfied();
+        let break_points = circuit.break_points.take();
+
+        FullConfig {
+            selector,
+            advice_equality_constraints,
+            constant_equality_constraints,
+            break_points,
+            flexgateconfig,
+        }
     }
 
     /// Assigns all advice and fixed cells, turns on selectors, imposes equality constraints.
@@ -387,6 +411,26 @@ pub struct FlexGateConfigParams {
     pub num_fixed: usize,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FullConfig {
+    pub selector: Vec<bool>,
+    pub advice_equality_constraints: Vec<(usize, usize)>,
+    pub constant_equality_constraints: Vec<([u64; 4], usize)>,
+    pub break_points: MultiPhaseThreadBreakPoints,
+    pub flexgateconfig: FlexGateConfigParams,
+}
+
+impl FullConfig {
+    pub fn from_json(json: &str) -> FullConfig {
+       serde_json::from_str(json).unwrap()
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+
 /// A wrapper struct to auto-build a circuit from a `GateThreadBuilder`.
 #[derive(Clone, Debug)]
 pub struct GateCircuitBuilder<F: ScalarField> {
@@ -571,4 +615,69 @@ pub enum CircuitBuilderStage {
     Keygen,
     Prover,
     Mock,
+}
+
+impl<F: ScalarField> FullConfig<F> {
+    pub fn sub_synthesize(
+        &self,
+        gate: &FlexGateConfig<F>,
+        lookup_advice: &[Vec<Column<Advice>>],
+        q_lookup: &[Option<Selector>],
+        layouter: &mut impl Layouter<F>,
+    ) -> HashMap<(usize, usize), (circuit::Cell, usize)> {
+        let mut first_pass = SKIP_FIRST_PASS;
+        let mut assigned_advices = HashMap::new();
+        layouter
+            .assign_region(
+                || "GateCircuitBuilder generated circuit",
+                |mut region| {
+                    if first_pass {
+                        first_pass = false;
+                        return Ok(());
+                    }
+                    let threads = self.threads;
+                    let break_points = self.break_points.take();
+                    assign_threads_in(
+                        0,
+                        threads,
+                        gate,
+                        lookup_advice.get(phase).unwrap_or(&vec![]),
+                        &mut region,
+                        break_points,
+                    );
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assigned_advices
+    }
+}
+
+impl<F: ScalarField> Circuit<F> for FullConfig<F> {
+    type Config = FlexGateConfig<F>;
+    type FloorPlanner = SimpleFloorPlanner;
+
+    fn without_witnesses(&self) -> Self {
+        unimplemented!()
+    }
+
+    fn configure(meta: &mut ConstraintSystem<F>) -> FlexGateConfig<F> {
+        let FlexGateConfigParams {
+            strategy,
+            num_advice_per_phase,
+            num_lookup_advice_per_phase: _,
+            num_fixed,
+            k,
+        } = serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+        FlexGateConfig::configure(meta, strategy, &num_advice_per_phase, num_fixed, k)
+    }
+
+    fn synthesize(
+        &self,
+        config: Self::Config,
+        mut layouter: impl Layouter<F>,
+    ) -> Result<(), Error> {
+        self.sub_synthesize(&config, &[], &[], &mut layouter);
+        Ok(())
+    }
 }
