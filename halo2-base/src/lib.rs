@@ -34,7 +34,7 @@ pub use halo2_proofs_axiom as halo2_proofs;
 use halo2_proofs::plonk::Assigned;
 use utils::ScalarField;
 
-use rcc::{Composer, runtime_composer::{RuntimeComposer, Wire}};
+use rcc::{runtime_composer::{RuntimeComposer, Wire}, Composer};
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -376,8 +376,8 @@ impl<F: ScalarField> Context<F> {
             // runtime composer expects WireVal to be defined
             type WireVal = F;
 
-            use std::env;
-            let args: Vec<String> = env::args().collect();
+            // use std::env;
+            // let args: Vec<String> = env::args().collect();
         };
 
         // let (constant_values, constant_indices): (Vec<_>, Vec<_>) = self.constants.iter().map(|(v, w)| {
@@ -404,21 +404,13 @@ impl<F: ScalarField> Context<F> {
                     ).collect(),
         }
     }
+}
 
-    pub fn smart_map<T>(&mut self, iter: impl Iterator<Item = T>, mut f: impl FnMut(&mut Self, &T) -> ()) {
-        let items: Vec<T> = iter.collect();
-        let step_size = (items.len() as f64).sqrt() as usize;
-        println!("step_size: {step_size}");
-        items.iter().enumerate().for_each(|(i, item)| {
-            if i % step_size == 0 {
-                if i > 0 {
-                    self.runtime_composer.exit_context();
-                }
-                self.runtime_composer.enter_context(String::from("smart_loop"));
-            }
-            f(self, item)
-        });
-        self.runtime_composer.exit_context();
+impl<F: ScalarField> Composer for Context<F> {
+    type Wire = Wire;
+    type BaseComposer = RuntimeComposer;
+
+    fn base_composer(&mut self) -> Option<&mut RuntimeComposer> {
+        Some(&mut self.runtime_composer)
     }
-
 }

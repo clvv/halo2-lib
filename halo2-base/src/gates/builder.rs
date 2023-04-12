@@ -617,67 +617,67 @@ pub enum CircuitBuilderStage {
     Mock,
 }
 
-impl<F: ScalarField> FullConfig<F> {
-    pub fn sub_synthesize(
-        &self,
-        gate: &FlexGateConfig<F>,
-        lookup_advice: &[Vec<Column<Advice>>],
-        q_lookup: &[Option<Selector>],
-        layouter: &mut impl Layouter<F>,
-    ) -> HashMap<(usize, usize), (circuit::Cell, usize)> {
-        let mut first_pass = SKIP_FIRST_PASS;
-        let mut assigned_advices = HashMap::new();
-        layouter
-            .assign_region(
-                || "GateCircuitBuilder generated circuit",
-                |mut region| {
-                    if first_pass {
-                        first_pass = false;
-                        return Ok(());
-                    }
-                    let threads = self.threads;
-                    let break_points = self.break_points.take();
-                    assign_threads_in(
-                        0,
-                        threads,
-                        gate,
-                        lookup_advice.get(phase).unwrap_or(&vec![]),
-                        &mut region,
-                        break_points,
-                    );
-                    Ok(())
-                },
-            )
-            .unwrap();
-        assigned_advices
-    }
-}
+// impl<F: ScalarField> FullConfig<F> {
+//     pub fn sub_synthesize(
+//         &self,
+//         gate: &FlexGateConfig<F>,
+//         lookup_advice: &[Vec<Column<Advice>>],
+//         q_lookup: &[Option<Selector>],
+//         layouter: &mut impl Layouter<F>,
+//     ) -> HashMap<(usize, usize), (circuit::Cell, usize)> {
+//         let mut first_pass = SKIP_FIRST_PASS;
+//         let mut assigned_advices = HashMap::new();
+//         layouter
+//             .assign_region(
+//                 || "GateCircuitBuilder generated circuit",
+//                 |mut region| {
+//                     if first_pass {
+//                         first_pass = false;
+//                         return Ok(());
+//                     }
+//                     let threads = self.threads;
+//                     let break_points = self.break_points.take();
+//                     assign_threads_in(
+//                         0,
+//                         threads,
+//                         gate,
+//                         lookup_advice.get(phase).unwrap_or(&vec![]),
+//                         &mut region,
+//                         break_points,
+//                     );
+//                     Ok(())
+//                 },
+//             )
+//             .unwrap();
+//         assigned_advices
+//     }
+// }
 
-impl<F: ScalarField> Circuit<F> for FullConfig<F> {
-    type Config = FlexGateConfig<F>;
-    type FloorPlanner = SimpleFloorPlanner;
+// impl<F: ScalarField> Circuit<F> for FullConfig<F> {
+//     type Config = FlexGateConfig<F>;
+//     type FloorPlanner = SimpleFloorPlanner;
 
-    fn without_witnesses(&self) -> Self {
-        unimplemented!()
-    }
+//     fn without_witnesses(&self) -> Self {
+//         unimplemented!()
+//     }
 
-    fn configure(meta: &mut ConstraintSystem<F>) -> FlexGateConfig<F> {
-        let FlexGateConfigParams {
-            strategy,
-            num_advice_per_phase,
-            num_lookup_advice_per_phase: _,
-            num_fixed,
-            k,
-        } = serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
-        FlexGateConfig::configure(meta, strategy, &num_advice_per_phase, num_fixed, k)
-    }
+//     fn configure(meta: &mut ConstraintSystem<F>) -> FlexGateConfig<F> {
+//         let FlexGateConfigParams {
+//             strategy,
+//             num_advice_per_phase,
+//             num_lookup_advice_per_phase: _,
+//             num_fixed,
+//             k,
+//         } = serde_json::from_str(&std::env::var("FLEX_GATE_CONFIG_PARAMS").unwrap()).unwrap();
+//         FlexGateConfig::configure(meta, strategy, &num_advice_per_phase, num_fixed, k)
+//     }
 
-    fn synthesize(
-        &self,
-        config: Self::Config,
-        mut layouter: impl Layouter<F>,
-    ) -> Result<(), Error> {
-        self.sub_synthesize(&config, &[], &[], &mut layouter);
-        Ok(())
-    }
-}
+//     fn synthesize(
+//         &self,
+//         config: Self::Config,
+//         mut layouter: impl Layouter<F>,
+//     ) -> Result<(), Error> {
+//         self.sub_synthesize(&config, &[], &[], &mut layouter);
+//         Ok(())
+//     }
+// }

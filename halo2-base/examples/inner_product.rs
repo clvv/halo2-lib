@@ -36,6 +36,7 @@ use pprof::criterion::{Output, PProfProfiler};
 
 use quote::quote;
 use rust_format::{RustFmt, Formatter};
+use rcc::Composer;
 
 const K: u32 = 19;
 
